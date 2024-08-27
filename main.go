@@ -27,6 +27,9 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Invalid IP: %q\n", ip)
 			os.Exit(1)
 		}
+		if ip4 := t.To4(); ip4 != nil {
+			t = ip4
+		}
 		if i > 0 && len(t) != len(list[0]) {
 			fmt.Fprintf(os.Stderr, "Mismatching IP space: %q\n", ip)
 			os.Exit(1)
@@ -34,15 +37,9 @@ func main() {
 		list[i] = t
 	}
 
-	var c, bits int
+	bits := len(list[0]) * 8
+	c := bits - 1
 
-	if list[0].To4() == nil {
-		c = 127
-		bits = 128
-	} else {
-		c = 31
-		bits = 32
-	}
 nextCIDR:
 	for ; c > 0; c-- {
 		_, mask, err := net.ParseCIDR(fmt.Sprintf("%s/%d", list[0], c))
