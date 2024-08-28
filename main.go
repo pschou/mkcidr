@@ -114,9 +114,9 @@ nextCIDR:
 
 		if passed {
 			if size >= 0 {
-				fmt.Printf("%s  %s-%s  %s  %d\n", mask, a, z, bcast, size)
+				fmt.Printf("%s  %s-%s  %s/%s  %d\n", mask, a, z, getMask1(mask), getMask2(mask), size)
 			} else {
-				fmt.Printf("%s  %s-%s  %s\n", mask, a, z, bcast)
+				fmt.Printf("%s  %s-%s  %s/%s\n", mask, a, z, getMask1(mask), getMask2(mask))
 			}
 
 			if !*options {
@@ -131,6 +131,30 @@ func BroadcastAddr(n netip.Prefix) netip.Addr {
 	slice := n.Addr().AsSlice()
 	//fmt.Println("bits", slice)
 	for b := len(slice)*8 - 1; b >= n.Bits(); b-- {
+		//fmt.Println("b", b, (b-1)/8, slice[(b-1)/8], 1<<(7-b%8), b%8)
+		slice[b/8] |= 1 << (7 - b%8)
+		//fmt.Println(" ==", slice)
+	}
+	a, _ := netip.AddrFromSlice(slice)
+	return a
+}
+
+// BroadcastAddr returns the last address in the given network, or the broadcast address.
+func getMask1(n netip.Prefix) netip.Addr {
+	slice := make([]byte, len(n.Addr().AsSlice()))
+	//fmt.Println("bits", slice)
+	for b := len(slice)*8 - 1; b >= n.Bits(); b-- {
+		//fmt.Println("b", b, (b-1)/8, slice[(b-1)/8], 1<<(7-b%8), b%8)
+		slice[b/8] |= 1 << (7 - b%8)
+		//fmt.Println(" ==", slice)
+	}
+	a, _ := netip.AddrFromSlice(slice)
+	return a
+}
+func getMask2(n netip.Prefix) netip.Addr {
+	slice := make([]byte, len(n.Addr().AsSlice()))
+	//fmt.Println("bits", slice)
+	for b := n.Bits() - 1; b >= 0; b-- {
 		//fmt.Println("b", b, (b-1)/8, slice[(b-1)/8], 1<<(7-b%8), b%8)
 		slice[b/8] |= 1 << (7 - b%8)
 		//fmt.Println(" ==", slice)
