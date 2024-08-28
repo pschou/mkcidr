@@ -18,12 +18,18 @@ func main() {
 	allowBroadcast := flag.BoolP("broadcast", "z", false, "Allow broadcast as a valid address")
 
 	options := flag.BoolP("options", "o", false, "Show additional subnet options")
+	help := flag.BoolP("help", "h", false, "Show this usage")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Make CIDR notation from a list of IPs, https://github.com/pschou/mkcidr version: %s\n\nmkcidr [flag] [IPs...]\n", version)
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+
+	if *help {
+		flag.Usage()
+		os.Exit(0)
+	}
 
 	if flag.NArg() == 0 {
 		os.Exit(0)
