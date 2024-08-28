@@ -5,21 +5,21 @@ Make a CIDR mask given a set of IPs
 ## Usage
 ```
 $ ./mkcidr -h
-Make CIDR from IPs, https://github.com/pschou/mkcidr
+Make CIDR notation from a list of IPs, https://github.com/pschou/mkcidr version: 0.1.20240828.1310
 
 mkcidr [flag] [IPs...]
-  -d    Enable debug
-  -omit-base
-        Disallow base (default true)
-  -omit-broadcast
-        Disallow broadcast (default true)
-  -x int
-        Allow for N number of extra addresses in subnet
+  -a, --base        Allow base as a valid address
+  -z, --broadcast   Allow broadcast as a valid address
+  -d, --debug       Enable debug
+  -x, --extra int   Allow for N number of extra addresses in subnet
+  -o, --options     Show additional subnet options
 ```
 
 
 ## Example
+
+Note the output format is: CIDR  Range  Broadcast  Size
 ```
-mkcidr  1.2.3.4 1.2.3.67
-1.2.3.0/25  1.2.3.0-1.2.3.127
+$ ./mkcidr 1.2.3.224 1.2.3.222
+1.2.3.192/26  1.2.3.193-1.2.3.254  1.2.3.255  62
 ```

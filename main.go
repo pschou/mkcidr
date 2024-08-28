@@ -1,51 +1,56 @@
 package main
 
 import (
-	"flag"
 	"fmt"
-	"log"
-	"net"
+	"net/netip"
 	"os"
+
+	flag "github.com/spf13/pflag"
 )
 
+var version = "STATIC"
+
 func main() {
-	extra := flag.Int("x", 0, "Allow for N number of extra addresses in subnet")
-	debug := flag.Bool("d", false, "Enable debug")
-	omitBase := flag.Bool("omit-base", true, "Disallow base")
-	omitBroadcast := flag.Bool("omit-broadcast", true, "Disallow broadcast")
+	extra := flag.IntP("extra", "x", 0, "Allow for N number of extra addresses in subnet")
+	debug := flag.BoolP("debug", "d", false, "Enable debug")
+
+	allowBase := flag.BoolP("base", "a", false, "Allow base as a valid address")
+	allowBroadcast := flag.BoolP("broadcast", "z", false, "Allow broadcast as a valid address")
+
+	options := flag.BoolP("options", "o", false, "Show additional subnet options")
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Make CIDR from IPs, https://github.com/pschou/mkcidr\n\nmkcidr [flag] [IPs...]\n")
+		fmt.Fprintf(os.Stderr, "Make CIDR notation from a list of IPs, https://github.com/pschou/mkcidr version: %s\n\nmkcidr [flag] [IPs...]\n", version)
 		flag.PrintDefaults()
 	}
 	flag.Parse()
 
-	list := make([]net.IP, len(flag.Args()))
+	if flag.NArg() == 0 {
+		os.Exit(0)
+	}
+
+	list := make([]netip.Addr, flag.NArg())
 	for i, ip := range flag.Args() {
-		t := net.ParseIP(ip)
-		if t == nil {
-			fmt.Fprintf(os.Stderr, "Invalid IP: %q\n", ip)
+		t, err := netip.ParseAddr(ip)
+		if err != nil {
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid IP: %q  %s\n", ip, err)
 			os.Exit(1)
 		}
-		if ip4 := t.To4(); ip4 != nil {
-			t = ip4
-		}
-		if i > 0 && len(t) != len(list[0]) {
+		if i > 0 && t.Is4() != list[0].Is4() {
 			fmt.Fprintf(os.Stderr, "Mismatching IP space: %q\n", ip)
 			os.Exit(1)
 		}
 		list[i] = t
 	}
 
-	bits := len(list[0]) * 8
+	bits := len(list[0].AsSlice()) * 8
 	c := bits - 1
 
 nextCIDR:
 	for ; c > 0; c-- {
-		_, mask, err := net.ParseCIDR(fmt.Sprintf("%s/%d", list[0], c))
-		if err != nil {
-			log.Fatal("err", err)
-		}
+		mask, _ := list[0].Prefix(c)
 		bcast := BroadcastAddr(mask)
 		if *debug {
 			fmt.Println("Testing mask", mask)
@@ -56,13 +61,13 @@ nextCIDR:
 			if *debug {
 				fmt.Printf("  ip: %s  contained: %v\n", ip, mask.Contains(ip))
 			}
-			if ip.Equal(mask.IP) && *omitBase {
+			if ip.Compare(mask.Addr()) == 0 && !*allowBase {
 				if *debug {
 					fmt.Printf("  ip: %s  is base for subnet, skipping\n", ip)
 				}
 				passed = false
 			}
-			if ip.Equal(bcast) && *omitBroadcast {
+			if ip.Compare(bcast) == 0 && !*allowBroadcast {
 				if *debug {
 					fmt.Printf("  ip: %s  is broadcast for subnet, skipping\n", ip)
 				}
@@ -73,32 +78,57 @@ nextCIDR:
 			}
 		}
 		used := len(list)
-		size := 1 << (bits - c)
-		if *omitBroadcast {
-			size--
+		var size int
+		if bits-c <= 42 {
+			size = 1 << (bits - c)
+			if !*allowBroadcast {
+				size--
+			}
+			if !*allowBase {
+				size--
+			}
+			if *debug {
+				fmt.Printf("  used: %d  size: %d  remaining: %d\n", used, size, size-used-2)
+			}
+			if size-used > 0 && size-used < *extra {
+				passed = false
+			}
+		} else {
+			size = -1
 		}
-		if *omitBase {
-			size--
+
+		a := mask.Addr()
+		if !*allowBase {
+			a = a.Next()
 		}
-		if *debug {
-			fmt.Printf("  used: %d  size: %d  remaining: %d\n", used, size, size-used-2)
+		z := bcast
+		if !*allowBroadcast {
+			z = z.Prev()
 		}
-		if size-used > 0 && size-used < *extra {
-			passed = false
-		}
+
 		if passed {
-			fmt.Printf("%s  %s-%s\n", mask, mask.IP, bcast)
-			break
+			if size >= 0 {
+				fmt.Printf("%s  %s-%s  %s  %d\n", mask, a, z, bcast, size)
+			} else {
+				fmt.Printf("%s  %s-%s  %s\n", mask, a, z, bcast)
+			}
+
+			if !*options {
+				break
+			}
 		}
 	}
 }
 
 // BroadcastAddr returns the last address in the given network, or the broadcast address.
-func BroadcastAddr(n *net.IPNet) net.IP {
-	// The golang net package doesn't make it easy to calculate the broadcast address. :(
-	broadcast := net.IP(make([]byte, len(n.IP)))
-	for i := 0; i < len(n.IP); i++ {
-		broadcast[i] = n.IP[i] | ^n.Mask[i]
+func BroadcastAddr(n netip.Prefix) netip.Addr {
+	slice := n.Addr().AsSlice()
+	//fmt.Println("bits", slice)
+	for b := len(slice)*8 - 1; b >= n.Bits(); b-- {
+		//fmt.Println("b", b, (b-1)/8, slice[(b-1)/8], 1<<(7-b%8), b%8)
+		slice[b/8] |= 1 << (7 - b%8)
+		//fmt.Println(" ==", slice)
 	}
-	return broadcast
+	a, _ := netip.AddrFromSlice(slice)
+	return a
 }
